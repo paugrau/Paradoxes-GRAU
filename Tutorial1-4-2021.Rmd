@@ -362,4 +362,5 @@ stargazer::stargazer(mymodel,
 plot_model(mymodel, type = "pred", terms = c("P29", "P28"))+labs(x="National identification (1=ESP, 5=CAT)", fill="Subjective Social Class (0-10)")+theme_ipsum()+theme(legend.position = "top")
 ```
 
+As this plot cannot be seen properly in the HTML, I have also uploaded it as a PNG in the repository.
 **Do you know how can I introduce the CI?**
