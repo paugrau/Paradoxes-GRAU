@@ -1,0 +1,365 @@
+---
+title: "Tutorial session"
+author: "Pau Grau"
+date: "31/3/2021"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    number_sections: yes
+  pdf_document:
+    toc: yes
+---
+
+# Social integration and support for radical territorial politics
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+library(tidyverse)
+library(haven)
+library(stargazer)
+library(hrbrthemes)
+library(sjPlot)
+library(patchwork)
+```
+
+## Data
+
+To test my hypothesis I rely on the survey “Enquesta experimental d'identificació de les classes socials a Catalunya”  (Garcia i Garcia, 2021)^[http://upceo.ceo.gencat.cat/wsceop/6968/Microdades%20anonimitzades%20cine%20REO%20-914.sav], which was realized on November 2018. It is the most accurated one in terms of size and variables. However, they do not measure exactly what I want to measure (but it's the one I found that it's closer).
+
+```{r cars}
+df <- read_spss("http://upceo.ceo.gencat.cat/wsceop/6968/Microdades%20anonimitzades%20cine%20REO%20-914.sav")
+
+codebook <- map_df(df, function(x) attributes(x)$label) %>% 
+  gather(key = Code, value = Label)
+
+```
+
+# Descriptive statistics
+
+```{r echo=FALSE, results='asis'}
+elimina_na <- function(var){
+  replace(var, which(var>10), NA)
+}
+
+#Build index
+
+df_1 <- df%>%
+  mutate(P9A = elimina_na(P9A),
+         P9B = elimina_na(P9B),
+         P9_1 = ((P9A*-1)+P9B)+3,
+         P6A=elimina_na(P6A),
+         P6B=elimina_na(P6B),
+         P6C=elimina_na(P6C),
+         P6D=elimina_na(P6D),
+         P6E=elimina_na(P6E),
+         P6F=elimina_na(P6F),
+         P6G=elimina_na(P6G),
+         P6H=elimina_na(P6H),
+         P6I=elimina_na(P6I),
+         P6J=elimina_na(P6J),
+         P6K=elimina_na(P6K),
+         P6L=elimina_na(P6L),
+         P6M=elimina_na(P6M),
+         P6N=elimina_na(P6N),
+         P6_sum = P6A+P6B+P6C+P6D+P6E+P6F+P6G+P6H+P6I+P6J+P6K+P6L+P6M+P6N,
+         P6_res = 0-P6A-P6B-P6C-P6D-P6E-P6F-P6G-P6H-P6I-P6J-P6K-P6L-P6M-P6N,
+         P6_dic = case_when(
+           P6A==1| 
+           P6B==1|
+           P6C==1|
+           P6D==1|
+           P6E==1|
+           P6F==1|
+           P6G==1|
+           P6H==1|
+           P6I==1|
+           P6J==1|
+           P6K==1|
+           P6L==1|
+           P6M==1|
+           P6N==1~1,
+           TRUE~0
+         ),
+         P28=elimina_na(P28),
+         P35=elimina_na(P35),
+         P17=elimina_na(P17),
+         P29=elimina_na(P29),
+         P32A=elimina_na(P32A),
+         P32A=case_when(
+           P32A==1~"CAT",
+           P32A==2~"SPA",
+           P32A==3~"CAT=SPA",
+           TRUE~"Others"
+         ))
+         
+  
+cor.test(df_1$P9A, df_1$P9B) #-0.31***
+
+ggplot(df_1) +
+ aes(x = P9A, y = P9B) +
+ geom_jitter() +
+ geom_smooth(method="lm")+
+  labs(x="You can trust in most of the people", y="every precaution is little when dealing with people")+
+ theme_minimal()
+
+ggplot(df_1) +
+ aes(x = P9_1)+
+   labs(x="Social trust")+
+  geom_histogram()
+
+ggplot(df_1) +
+ aes(x = log(P6_sum), y = P9_1) +
+ geom_jitter() +
+ geom_smooth()+
+ labs(x="Social interaction (continuous)", y="Social trust")+
+ theme_minimal()
+
+ggplot(df_1) +
+ aes(x = as.factor(P6_dic), y = P9_1, fill=as.factor(P6_dic)) +
+ geom_jitter() +
+ geom_smooth(method="lm")+
+  geom_boxplot(alpha=0.4)+
+ labs(x="Social interaction (dichotomic)", y="Social trust")+
+ theme_minimal()
+
+ggplot(df_1) +
+ aes(x = P28, y = P9_1) +
+ geom_jitter() +
+ geom_smooth(method="lm")+
+    labs(x="Subjective social class", y="Social trust")+
+ theme_minimal()
+
+ggplot(df_1) +
+ aes(x = P28, y = P35) +
+ geom_jitter() +
+ geom_smooth(method="lm")+
+  labs(x="Subjective social class", y="Subjective atractiveness")+
+ theme_minimal()
+
+```
+
+# Determinants of subjective social class
+
+The conceptualization of social integration used by Gidron & Hall (2020) is multidimensional and based in “the degree to which individuals see themselves as part of a shared normative order”, “their levels of social interaction with others”, and “the extent to which they feel recognized or respected” (Gidron & Hall, 2020, p. 1031). Specifically, they measure it with the question “There are people who tend to be towards the top of our society and people who tend to be towards the bottom” and find that it explains something more than just Socio Economic Status (which refers to economic capacity)(Fiske et al., 2016) and that it is strongly correlated with trust in people, engagement in social activities, and the feeling of being treated with respect. The questionnaire does not include the “social ladder” question as such but rather asks for the “subjective social class”. As it is a slightly different question that the one used by Gidron & Hall, and it might be focused on the wealth component while undermeasuring the status one, I will check its validity by building a model that uses measures of trust in people, engagement in social activities, and the feeling of being treated with respect. Specifically: 
+
+- I will measure shared normative order (trust in other people) through an index that merges agreement with “you can trust in most of the people” and “every precaution is little when dealing with people”. They have a correlation of -0.31 significant at 99% of confidence. The values are normalized from 0 to 6 for a better interpretation.
+
+- Secondly, I will measure engagement in social activities with a battery question that asks for diverse kinds of social activities (e.g. neighbor associations, sport clubs, cultural associations, parties or trade unions). Following GH I will focus on union and church. 
+
+- Third, as there I s no question asking directly for perceived respect, I rely on the indirect measure “subjective attractiveness”. 
+
+
+```{r model_social class, results='asis'}
+model1 <- lm(P28~P9_1+P35, data=df_1)
+model2 <- lm(P28~log(P6_sum)+P9_1+P35, data=df_1)
+model2_1 <- lm(P28~P6_dic+P9_1+P35, data=df_1)
+model3 <- lm(P28~log(P6_sum)+P9_1+P35+P17, data=df_1) #Without log the result is the same
+model3_1 <- lm(P28~P6_dic+P9_1+P35+P17, data=df_1) #Without log the result is the same
+model4 <- lm(P28~log(P6_sum)+P9_1+P35+P17+as.factor(P32A), data=df_1)
+
+stargazer::stargazer(model1, model2, model2_1, model3, model3_1, model4, 
+                     type = "html", 
+                     out = "taula.html",
+                     dep.var.labels = "Subjective social class (0-10)",
+                     covariate.labels = c("log(Participation in associations)", 
+                     "Participation in associations (binary)",
+                     "Social trust",
+                     "Subjective attractiveness",
+                     "Income",
+                     "Language: Catalan=Spanish",
+                     "Language: Others",
+                     "Language: Spanish"),
+                     notes="Ordinary least squares regressions (OLS). Reference group for language is Catalan. Data from CEO (2018)")
+
+df_1$P29_2 <- df_1$P29^2
+model5 <- lm(P28~log(P6_sum)+P9_1+P35+P17+as.factor(P32A)+P29+P29_2, data=df_1)
+
+model6 <- lm(P28~log(P6_sum)+P9_1+P35+P17+as.factor(P3A)+as.factor(P32A), data=df_1) #OK, but more variables and less significant ones.
+
+
+```
+
+```{r random_forest, eval=FALSE, include=FALSE}
+library(randomForest)
+
+df_2 <- df_1%>%
+  select(P28, P9_1, P6_sum, P35, P17, P32A, P30)%>%
+  na.omit()
+
+set.seed(1)
+
+sum(!complete.cases(df_2))
+
+model <- randomForest(
+  formula = P28~ .,
+  data = df_2
+)
+
+```
+
+It seems that once controlling for language participation in associations is no longer significant. When including income the effect of social trust is no longer significant. **Can I consider this variable a good proxy for "social integration"?** Next I reproduce G&H2020 Table 1, finding similar results with data from CEO2018.
+
+```{r Gidron_Hall_Table1_Replication, results='asis'}
+
+df_3 <- df_1%>%
+  mutate(
+    income=P17,
+    educ=case_when(
+      P3A>=6~1,
+      P3A<6~0),
+    sex=case_when(
+      SEXE==2~1,
+      SEXE==1~0),
+    age=F02,
+    union=case_when(
+      P6D<3~1,
+      P6D>3&P6D<90~0),
+    church=case_when(
+      P27<8&P6E<4~1,
+      TRUE~0),
+    unemp=case_when(
+      P10A==4|P10A==5~1,
+      P10A<3|P10A>5&P10A!=99~0),
+    born=P20,
+    SSS=P28,
+    occupation=case_when(
+  P11A==1~"Managers",
+  P11A==2|P11A==3~"Technicians",
+  P11A==5|P11A==4~"Low-skill services",
+  P11A==6|P11A==7|P11A==8|P11A==9~"Routine workers"))
+
+model_GAT1 <- lm(P28~income+sex+age+union+church+educ+unemp+as.factor(born), data=df_3)
+model_GAT1_1 <- lm(P28~income+sex+age+union+church+educ+unemp+as.factor(born)+P9A, data=df_3)
+
+model_GAT2 <- lm(P28~income+sex+age+union+church+educ+unemp+as.factor(born)+P35, data=df_3)
+model_GAT3 <- lm(P28~income+sex+age+union+church+educ+unemp+as.factor(born)+P35+occupation, data=df_3)
+model_GAT4 <- lm(P28~income+sex+age+union+church+educ+unemp+as.factor(born)+P35+occupation+P9_1, data=df_3)
+model_GAT4 <- lm(P28~income+sex+age+union+church+educ+unemp+as.factor(born)+occupation, data=df_3)
+
+#model_GAT4 <- lm(P28~income+sex+age+union+church+educ+unemp+as.factor(born)+P35+as.factor(P11A)+ as.factor(P32A), data=df_3)
+#
+#model_GAT2_1 <- lm(P28~income+sex+age+union+church+educ+unemp+as.factor(P14)+P35, data=df_3)
+#model_GAT2_2 <- lm(P28~income+sex+age+union+church+educ+unemp+as.factor(P14)+as.factor(born)+P35, data=df_3)
+
+stargazer::stargazer(model_GAT1, model_GAT2, model_GAT3,
+                     type = "html", 
+                     out = "GidronHall.html",
+                     dep.var.labels = "Subjective social class (0-10)",
+                     covariate.labels = c(
+                       "Income",
+                       "Female=1",
+                       "Age",
+                       "Union involvement=1",
+                       "Church involvement=1",
+                       "Higher education=1",
+                       "Unemployed=1",
+                       "Birth: Rest of Spain",
+                       "Birth: Rest of EU",
+                       "Birth: Rest of the world",
+                       "Subjective attractiveness",
+                       "Occupation: Manager",
+                       "Occupation: Routine worker",
+                       "Occupation: Technician"
+                       ),
+                     notes="Ordinary least squares regressions (OLS). Reference group for occupations is low-skilled workers. Reference group for birth is Catalonia. Data from CEO (2018)")
+
+#plot_models(model_GAT1, model_GAT2, model_GAT3)
+
+
+```
+
+# Determinants of vote
+
+
+```{r descriptive_vote}
+df_3 <- df_3%>%
+  mutate(vote=case_when(P31==1~"PPC",
+                        P31==2~"ERC",
+                        P31==3~"PSC",
+                        P31==4~"Cs",
+                        P31==5~"CUP",
+                        P31==6~"JxCAT",
+                        P31==7~"Podemos"))
+
+
+g1 <- ggplot(df_3, aes(x=P28, group=vote, fill=vote)) +
+    geom_density(adjust=1.5, position="fill") +
+    labs(x="Subjective Social Class")+
+    theme_ipsum()
+
+g2 <- ggplot(df_3, aes(x=P28, group=vote, color=vote, fill=vote)) +
+    geom_density(adjust=2, alpha=.4) +
+    theme_ipsum()+
+    labs(x="Subjective Social Class")+
+    facet_wrap(~vote, ncol=2)
+
+
+g3 <- ggplot(df_3, aes(x=P29, group=vote, fill=vote)) +
+    geom_density(adjust=2, position="fill") +
+      labs(x="National identification")+
+    theme_ipsum()
+
+g4 <- ggplot(df_3, aes(x=P29, group=vote, color=vote, fill=vote)) +
+    geom_density(adjust=2, alpha=.4) +
+    theme_ipsum()+
+    labs(x="National identification")+
+    facet_wrap(~vote, ncol=2)
+
+g1
+g2
+g3
+g4
+```
+
+```{r multinomial 1, message=FALSE, warning=FALSE, include=FALSE, results='asis'}
+df_4<-df_3%>%
+  mutate(vote=as.factor(vote))
+
+set.seed(1)
+
+library(nnet)
+df_4$vote <- relevel(df_4$vote, ref="PSC")
+
+mymodel <- multinom(vote~income+sex+age+union+church+educ+unemp+as.factor(born)+occupation+as.factor(P29)+P28+P28*as.factor(P29), data=df_4)
+
+mymodel_full <- multinom(vote~P29+income+sex+age+union+church+educ+unemp+as.factor(born)+occupation+P28+P28:P29, data=df_4)
+```
+
+
+```{r multinomial 2, message=FALSE, warning=FALSE, results='asis'}
+stargazer::stargazer(mymodel,
+                     type = "html", 
+                     out = "multinomial.html",
+                     covariate.labels = c(
+                       "Income",
+                       "Female=1",
+                       "Age",
+                       "Union involvement=1",
+                       "Church involvement=1",
+                       "Higher education=1",
+                       "Unemployed=1",
+                       "Birth: Rest of Spain",
+                       "Birth: Rest of EU",
+                       "Birth: Rest of the world",
+                       "Occupation: Manager",
+                       "Occupation: Routine worker",
+                       "Occupation: Technician",
+                       "Nat. Ident: +ESP than CAT",
+                       "Nat. Ident: ESP=CAT",
+                       "Nat. Ident: +CAT than ESP",
+                       "Nat. Ident: Only CAT",
+                       "Subjective social class"),
+                     notes="Multinomial Logit Model. Reference group for occupations is low-skilled workers. Reference group for birth is Catalonia. Reference group for national identity is only Spanish. Data from CEO (2018)")
+```
+
+
+```{r multinomial 3, message=FALSE, warning=FALSE, results='asis'}
+plot_model(mymodel, type = "pred", terms = c("P29", "P28"))+labs(x="National identification (1=ESP, 5=CAT)", fill="Subjective Social Class (0-10)")+theme_ipsum()+theme(legend.position = "top")
+```
+
+**Do you know how can I introduce the CI?**
